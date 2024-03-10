@@ -1,0 +1,320 @@
+---
+title: "Data cleaning, merging, EDA and analysis"
+author: "Juweria Ali"
+date: '2022-06-20'
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Clearing the workspace and setting the working directory.
+
+```{r include=F}
+rm(list=ls())
+```
+
+### Set working directory
+
+```{r}
+library(here)
+setwd(here::here())
+```
+
+#### Loading required libraries
+
+```{r}
+library(dplyr) #data wrangling
+library(caret) #machine learning algorithms
+library(stringr) #string manipulation
+library(tidyr) #data manipulation
+library(ggplot2) #data visualisation
+library(lubridate) #date conversions
+```
+
+### Loading the datasets
+```{r}
+eventsdf <- read.csv("eventData.csv", header=T, stringsAsFactors=T)
+weatherdf <- read.csv("weatherData.csv", header=T, stringsAsFactors=T)
+```
+
+### Exploring the events dataset 
+```{r}
+eventsdf <- as_tibble(eventsdf) # to see datatypes along with data
+glimpse(eventsdf) # makes it possible to see every column in the dataframe
+```
+
+### Cleaning Visitors column 
+```{r}
+unique(eventsdf$Visitors)# to view all unique values in the column
+```
+From the above results we can see instances that will require transformation. Values with >,~,-,and no string are filtered out into placeholders df1,df2,df3,df4 respectively.The below code is used to filter those specific rows using the filter() function and the grepl() function (Bobbitt 2020).
+
+```{r}
+df1 <- eventsdf %>% filter(grepl('>', Visitors))
+df2 <- eventsdf %>% filter(grepl('~', Visitors))
+df3 <- eventsdf %>% filter(grepl('-', Visitors))
+df4 <- eventsdf %>% filter(!grepl('>|~|-', Visitors))
+```
+
+```{r}
+str(df3)
+```
+### Now that we have all the rows separated we treat them appropriatley.
+
+Replacing the ">" symbol and "~" symbol with a blank and assuming the remainder value to be the value of that instance.
+
+```{r}
+df1$Visitors<- str_replace(df1$Visitors,">","") # replaces > with a blank
+df2$Visitors<- str_replace(df2$Visitors,"~","") #replaces ~ with a blank
+```
+
+### Treating instances that have a range
+
+First separating the lower limit and upper limit in two columns Col1 and Col2 and then calculating the average. Then assigning the average values, as values of these instances.Finally deleting Col1 and Col2 as they are no longer useful.
+```{r}
+df3<- df3%>% separate(Visitors, into = c("Col1","Col2"), sep = "-", remove = TRUE) 
+df3$Col1 <- as.numeric(df3$Col1)
+df3$Col2 <- as.numeric(df3$Col2)
+df3 <- df3 %>% mutate(Visitors=(Col1+Col2)/2) # Calculating average
+df3$Col1 <- NULL
+df3$Col2 <-NULL
+```
+
+
+```{r}
+dfA<-union(df1,df2)
+str(dfA)
+dfA$Visitors <- as.numeric(dfA$Visitors)
+```
+
+```{r}
+str(df4)
+df4$Visitors <- as.numeric(df4$Visitors)
+dfB<-union(df3,df4)
+```
+
+```{r}
+eventsdf<-union(dfA,dfB)
+```
+
+
+### Cleaning Hours column 
+
+A similar approach to cleaning the visitors column has been adapted below
+
+```{r}
+unique(eventsdf$Hours)
+```
+
+```{r}
+df1 <- eventsdf %>% filter(grepl('min', Hours))
+df2<- eventsdf %>% filter(grepl('hr|Hr|Hours', Hours))%>% filter(!grepl('min', Hours))
+df3 <- eventsdf %>% filter(!grepl('min|hr|Hr|Hours', Hours))
+```
+
+```{r}
+df1<- df1%>% separate(Hours, into = c("Col1","Col2"), sep = " ", remove = TRUE) 
+df1$Col1<- str_replace(df1$Col1,"hr","")
+df1$Col2<- str_replace(df1$Col2,"min","")
+str(df1)
+df1$Col1 <- as.numeric(df1$Col1)
+df1$Col2 <- as.numeric(df1$Col2)
+df1 <- df1 %>% mutate(Hours=((Col2/60)+Col1)) # Converting minutes to hours
+str(df1)
+df1$Col1 <- NULL
+df1$Col2 <- NULL
+```
+
+```{r}
+df2$Hours<- str_replace(df2$Hours,'hr|Hr|Hours',"")
+str(df2)
+df2$Hours <- as.numeric(df2$Hours)
+str(df2)
+```
+
+```{r}
+dfA <- union(df1,df2) 
+```
+
+```{r}
+str(df3)
+```
+```{r}
+str(dfA)
+```
+
+```{r}
+df3$Hours <- as.numeric(df3$Hours)
+eventsdf <- union(dfA,df3)
+```
+
+### Treating missing values in Advert & Music column by filtering them out as they are very few in number
+
+```{r}
+eventsdf <- eventsdf %>% filter(!Advert =="") %>% filter(!Music =="")
+```
+
+### Exploring the weather dataset
+
+```{r}
+weatherdf <- as_tibble(weatherdf) # to see datatypes along with data
+glimpse(weatherdf) # makes possible to see every column in the dataframe
+```
+
+### Replacing row value "neither" with "No" in SnowIce column
+
+As both values 'neither' and 'No' imply the same we replace instances with value 'neither'(as these are few in number comparitively) with value 'No'.This also ensures uniformity of the column.
+
+```{r}
+weatherdf$SnowIce[weatherdf$SnowIce == "neither"] <- "No" 
+```
+
+### Treating missing values in SnowIce column.
+
+```{r}
+weatherdf %>% filter(SnowIce == "") #Filtering out instances with missing values
+```
+
+```{r}
+weatherdf$SnowIce[weatherdf$SnowIce == ""] <- "No" 
+```
+
+
+### Task 2 Merging the datasets
+
+```{r}
+alldata <- merge(x = eventsdf, y = weatherdf, 
+                        by.x = c("Date"), 
+                        by.y=c("Date"), all.x = FALSE, all.y=TRUE)
+write.csv(alldata, "alldata.csv")
+
+```
+
+### Task 3 Exploratory Data analysis
+
+#### Chart 1
+
+```{r}
+ggplot(alldata,aes(Temp,Wind,color=SnowIce))+ geom_point()+ facet_wrap(vars(SnowIce))
+```
+
+#### Chart 2
+
+```{r}
+str(alldata)
+
+alldata$Date <- dmy(alldata$Date)
+```
+
+```{r}
+ggplot(alldata,aes(Date,Sales,color=SnowIce))+ geom_point()+ facet_wrap(vars(SnowIce))+scale_x_date(date_labels = "%Y/%m")+geom_smooth()
+```
+
+
+```{r}
+alldata$Sales <- as.integer(as.character(alldata$Sales))
+bySnowIce <- group_by(alldata, SnowIce)
+groupedDetails <- summarise(bySnowIce,
+                    count = n(),
+                    averageSales = mean(Sales, na.rm=T),
+                    medianSales = median(Sales, na.rm=T), 
+                    highestSales = max(Sales, na.rm=T),
+                   
+                    )
+groupedDetails
+```
+
+#### Correlation between type of music and sales
+
+```{r}
+alldata$Sales <- as.integer(as.character(alldata$Sales))
+byMusic <- group_by(alldata, Music)
+groupedDetails <- summarise(byMusic,
+                    count = n(),
+                    averageSales = mean(Sales, na.rm=T),
+                    medianSales = median(Sales, na.rm=T), 
+                    highestSales = max(Sales, na.rm=T),
+                   
+                    )
+groupedDetails
+```
+#### Correlation between sport and sales
+
+```{r}
+alldata$Sales <- as.integer(as.character(alldata$Sales))
+bySport <- group_by(alldata, Sport)
+groupedDetails <- summarise(bySport,
+                    count = n(),
+                    averageSales = mean(Sales, na.rm=T),
+                    medianSales = median(Sales, na.rm=T), 
+                    highestSales = max(Sales, na.rm=T),
+                   
+                    )
+groupedDetails
+```
+
+#### Correlation between Advert and sales
+
+```{r}
+alldata$Sales <- as.integer(as.character(alldata$Sales))
+byAdvert <- group_by(alldata, Advert)
+groupedDetails <- summarise(byAdvert,
+                    count = n(),
+                    averageSales = mean(Sales, na.rm=T),
+                    medianSales = median(Sales, na.rm=T), 
+                    highestSales = max(Sales, na.rm=T),
+                   
+                    )
+groupedDetails
+```
+
+#### Correlation between type of day and sales
+
+```{r}
+alldata$Sales <- as.integer(as.character(alldata$Sales))
+byDay <- group_by(alldata, Day)
+groupedDetails <- summarise(byDay,
+                    count = n(),
+                    averageSales = mean(Sales, na.rm=T),
+                    medianSales = median(Sales, na.rm=T), 
+                    highestSales = max(Sales, na.rm=T),
+                   
+                    )
+groupedDetails
+```
+
+### Preparing the dataset for learning
+
+#### Removing columns that are not useful for learning as they do not add value to any further analysis
+
+```{r}
+alldata <- subset(alldata, select = -c(EventID,WindDir))
+```
+
+#### Removing NA's
+
+```{r}
+alldata <- na.omit(alldata)
+```
+
+### References
+
+* Bobbitt,Z., 2020. How to filter rows that contain a certain string using dplyr. [online].    
+  Torrance: Statology. Available from:        
+  https://www.statology.org/filter-rows-that-contain-string-dplyr/ [Accessed 26/06/2022].
+  
+* Ines, A., 2022. CMM535. [Recorded lecture week 1-5]. CMM 535 Data Science Development. School
+  of Computing. The Robert Gordon University [Accessed 27/06/2022].
+
+
+
+
+
+
+
+
